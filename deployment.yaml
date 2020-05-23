@@ -1,0 +1,91 @@
+resources:
+# VPC Network
+- name: nshah-network
+  type: compute.v1.network
+  properties:
+    autoCreateSubnetworks: false
+    routingConfig:
+      routingMode: REGIONAL
+# Firewall Rules
+- name: nshah-network-fw
+  type: compute.v1.firewall
+  properties:
+    network: $(ref.nshah-network.selfLink)
+    allowed:
+      - IPProtocol: tcp
+      - IPProtocol: udp
+      - IPProtocol: icmp
+# Two subnets
+- name: subnet-a
+  type: compute.v1.subnetwork
+  properties:
+    network: $(ref.nshah-network.selfLink)
+    region: us-west2
+    ipCidrRange: 10.1.0.0/24
+- name: subnet-b
+  type: compute.v1.subnetwork
+  properties:
+    network: $(ref.nshah-network.selfLink)
+    region: us-west2
+    ipCidrRange: 10.1.1.0/24
+# Two VMs, one in each zone and subnet
+- name: vm-a
+  type: compute.v1.instance
+  properties:
+    zone: us-west2-a
+    machineType: zones/us-west2-a/machineTypes/f1-micro
+    disks:
+    - deviceName: boot
+      type: PERSISTENT
+      boot: true
+      autoDelete: true
+      initializeParams:
+        sourceImage: projects/ubuntu-os-cloud/global/images/family/ubuntu-1804-lts
+    networkInterfaces:
+    - subnetwork: $(ref.subnet-a.selfLink)
+      accessConfigs:
+      - name: External NAT
+        type: ONE_TO_ONE_NAT
+- name: vm-b
+  type: compute.v1.instance
+  properties:
+    zone: us-west2-b
+    machineType: zones/us-west2-b/machineTypes/f1-micro
+    disks:
+    - deviceName: boot
+      type: PERSISTENT
+      boot: true
+      autoDelete: true
+      initializeParams:
+        sourceImage: projects/ubuntu-os-cloud/global/images/family/ubuntu-1804-lts
+    networkInterfaces:
+    - subnetwork: $(ref.subnet-b.selfLink)
+      accessConfigs:
+      - name: External NAT
+        type: ONE_TO_ONE_NAT
+# k8s cluster
+- name: k8s-mz
+  # type: container.v1.cluster
+  type: 'gcp-types/container-v1beta1:projects.zones.clusters'
+  properties:
+    # enableKubernetesAlpha: false
+    # locations:
+    # - us-west2-a
+    # - us-west2-b
+    zone: us-west2-a
+    cluster:
+      name: k8s-mz
+      network: $(ref.nshah-network.selfLink)
+      subnetwork: $(ref.subnet-a.selfLink)
+      networkPolicy:
+        enabled: true
+      nodePools:
+        - name: default
+          initialNodeCount: 4
+          config:
+            oauthScopes:
+                - https://www.googleapis.com/auth/compute
+                - https://www.googleapis.com/auth/devstorage.read_only
+                - https://www.googleapis.com/auth/logging.write
+                - https://www.googleapis.com/auth/monitoring
+            imageType: ubuntu
